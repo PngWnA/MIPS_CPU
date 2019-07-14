@@ -193,23 +193,25 @@ endmodule
 
 
 module alu(input      [31:0] a, b, 
-           input      [2:0]  alucont, 
+           input      [3:0]  alucont, 
            output reg [31:0] result,
            output            zero);
 
   wire [31:0] b2, sum, slt, sltu;
-  wire        N, Z, C, V;
+  // Start! - Changed bit size
+  wire [0:0]  N, Z, C, V;
+  // End!
 
-  assign b2 = alucont[2] ? ~b:b; 
+  assign b2 = alucont[3] ? ~b:b; 
 
   adder_32bit iadder32 (.a   (a),
-			     				.b   (b2),
-								.cin (alucont[2]),
-								.sum (sum),
-								.N   (N),
-								.Z   (Z),
-								.C   (C),
-								.V   (V));
+			      		.b   (b2),
+						.cin (alucont[3]),
+						.sum (sum),
+						.N   (N),
+						.Z   (Z),
+						.C   (C),
+						.V   (V));
 
   // signed less than ("N set and V clear" OR "N clear and V set")
   assign slt  = N ^ V ; 
@@ -218,11 +220,15 @@ module alu(input      [31:0] a, b,
   assign sltu = ~C ;   
 
   always@(*)
-    case(alucont[1:0])
-      2'b00: result <= #`mydelay a & b;
-      2'b01: result <= #`mydelay a | b;
-      2'b10: result <= #`mydelay sum;
-      2'b11: result <= #`mydelay slt;
+    case(alucont[2:0])
+      3'b000: result <= #`mydelay a & b;
+      3'b010: result <= #`mydelay a | b;
+      3'b100: result <= #`mydelay sum;
+      // Start! - Add SLTU and modify assignment according to TRM
+      3'b110: result <= #`mydelay {31'b0, slt[0]};
+      3'b111: result <= #`mydelay {31'b0, sltu[0]};
+      default: result <= #`mydelay 32'bx;
+      // End!
     endcase
 
   assign #`mydelay zero = (result == 32'b0);
