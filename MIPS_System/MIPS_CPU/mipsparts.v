@@ -373,3 +373,62 @@ module mux2 #(parameter WIDTH = 8)
   assign #`mydelay y = s ? d1 : d0; 
 
 endmodule
+
+
+module muxr2 #(parameter WIDTH = 8)
+             (input  [WIDTH-1:0] d0, d1, 
+              input              s,
+              input              reset, 
+              output [WIDTH-1:0] y);
+
+  assign #`mydelay y = ((s | reset) ? d1 : d0); 
+
+endmodule
+
+
+module mux4 #(parameter WIDTH = 8)
+			 (input [WIDTH-1:0] d0, d1, d2, d3,
+			  input [1:0]        s,
+			  output[WIDTH-1:0] y);
+
+	assign #`mydelay y = s[1] ? (s[0] ? d3 : d2) : (s[0] ? d1 : d0);
+
+endmodule 
+
+
+module forward (input      [4:0] rsID, rtID,
+				input      [4:0] rsEX, rtEX, 
+				input      [4:0] wrMEM, wrWB,
+				input      [0:0] rwMEM, rwWB,
+				input      [0:0] reset,
+				output     [5:0] muxcontrol); 
+
+
+	assign #`mydelay muxcontrol[0] = ((rwWB) & (rsEX == wrWB) & (wrWB != 0));
+	assign #`mydelay muxcontrol[1] = ((rwMEM) & (rsEX == wrMEM) & (wrMEM != 0));
+	assign #`mydelay muxcontrol[2] = ((rwWB) & (rtEX == wrWB) & (wrWB != 0)) ;
+	assign #`mydelay muxcontrol[3] = ((rwMEM) & (rtEX == wrMEM) & (wrMEM != 0));
+	assign #`mydelay muxcontrol[4] = ((rwWB) & (wrWB == rsID) & (wrWB != 0));
+	assign #`mydelay muxcontrol[5] = ((rwWB) & (wrWB == rtID) & (wrWB != 0));
+
+endmodule
+
+
+module hazard_detection (input [4:0] rsID, rtID,
+						 input [4:0] rtEX,
+						 input [4:0] rtMEM,
+						 input memreadEX,
+						 input memreadMEM,
+						 input reset,
+						 output [0:0] stall,
+						 output [0:0] flushcontrol);
+
+
+
+	assign #`mydelay stall = ((memreadEX & ((rtEX == rsID) | (rtEX == rtID))) | 
+	                         (memreadMEM & ((rtMEM == rsID) | (rtMEM == rtID)))) &
+	                         !(reset);
+	assign #`mydelay flushcontrol = stall;
+	
+
+endmodule
