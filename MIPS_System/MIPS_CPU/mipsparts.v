@@ -420,15 +420,13 @@ module hazard_detection (input [4:0] rsID, rtID,
 						 input memreadEX,
 						 input memreadMEM,
 						 input reset,
-						 output [0:0] stall,
-						 output [0:0] flushcontrol);
+						 output [0:0] stall);
 
 
 
 	assign #`mydelay stall = ((memreadEX & ((rtEX == rsID) | (rtEX == rtID))) | 
 	                         (memreadMEM & ((rtMEM == rsID) | (rtMEM == rtID)))) &
 	                         !(reset);
-	assign #`mydelay flushcontrol = stall;
 	
 
 endmodule

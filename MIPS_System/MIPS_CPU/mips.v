@@ -43,22 +43,29 @@ module mips(input         clk, reset,
   wire [31:0] srcbID;
 
   wire stall;
-  wire flushcontrol;
-
-
+  wire flush;
+  wire pcsrcEX;
+  wire [31:0] pcnextbrjjr;
 
   // ###### Lee GeonWoo : Start #######
   // Add 4 FF to implement pipeline
 
+  wire [31:0] instrIF;
+  mux2 #(32) flushmuxIF(
+    .d0  (instr),
+    .d1  (32'b0),
+    .s   (flush),
+    .y   (instrIF));
+
 
   // PC(32) + Instr(32) = 64
-  wire [31:0] PCID, instrID;
+  wire [31:0] PCID, instrID, instrtmp;
   flopenr #(64) IFID(
     .clk   (clk),
     .reset (reset),
     .en    (~stall),
-    .d     ({pcplus4, instr}),
-    .q     ({PCID, instrID})
+    .d     ({pcplus4, instrIF}),
+    .q     ({PCID, instrtmp})
     );
 
   // Mux for stalling control bits.
@@ -66,10 +73,17 @@ module mips(input         clk, reset,
   muxr2 #(14) controlmux(
     .d0    ({regwrite, memtoreg, jal, branch, notequal, memread, memwriteID, jump, regdst, aluop, alusrc, shiftl16, signext}),
     .d1    (14'b0),
-    .s     (flushcontrol),
+    .s     (stall | flush),
     .reset (reset),
     .y     (controlID)
     );
+
+  mux2 #(32) flushmuxID(
+    .d0  (instrtmp),
+    .d1  (32'b0),
+    .s   (flush),
+    .y   (instrID));
+
 
 
   // control(13) + PC(32) + rd1(32) + rd(32) + signimm(32) + instr(32) + rs(5) + rt(5) + rd(5) = 188
@@ -84,10 +98,18 @@ module mips(input         clk, reset,
     .reset (reset),
     .en    (1'b1),
     .d     ({controlID[13:1], PCID, srca, memwritedataID, signimm[31:0],
-             instrID, instrID[25:21], instrID[20:16], instrID[15:11]}),
+             instrID, instrtmp[25:21], instrtmp[20:16], instrtmp[15:11]}),
     .q     ({controlEX, regdstEX, aluopEX, alusrcEX, shiftl16EX, PCEX, rd1EX, rd2EX,
              signimmEX, instrEX, rsEX, rtEX, rdEX})
     );
+
+  // Flushing Logic.
+  // wire [7:0] controlEX;
+  // controlMEM, branchMEM, notequalMEM, memreadMEM, memwrite, jumpMEM
+  // regwriteWB, memtoregWB, jalWB
+  assign pcsrcEX = (controlEX[4] & (controlEX[3] ^ zero));
+  assign flush = pcsrcEX | controlEX[0] | controlEX[5] | jr;
+
 
   // control(9) + PC(32) + PC(32) + instr(32) + zero(1) + aluout(32) + wd(32) + wr(5) + rd1(32) = 207
   wire [2:0] controlMEM;
@@ -95,8 +117,6 @@ module mips(input         clk, reset,
   wire [31:0] PCMEM, aluoutMEM, instrMEM, wdMEM;
   wire [4:0] wrMEM;
   wire [31:0] rd1MEM;
-
-  assign pcsrc = branchMEM & (zeroMEM ^ notequalMEM);
 
   flopenr #(207) EXMEM(
     .clk   (clk),
@@ -106,6 +126,8 @@ module mips(input         clk, reset,
     .q     ({controlMEM, branchMEM, notequalMEM, memreadMEM, memwrite, jumpMEM, jrMEM, 
              pcplus4MEM, PCMEM, instrMEM, zeroMEM, memaddr, memwritedata, wrMEM, rd1MEM})
     );
+
+  //assign pcsrcMEM = branchMEM & (zeroMEM ^ notequalMEM);
 
 
   // control(3) + wd1(32) + wd2(32) + wr(5) + PC(32) = 104
@@ -147,8 +169,7 @@ module mips(input         clk, reset,
     .memreadEX   (controlEX[2]),
     .memreadMEM  (memreadMEM),
     .reset       (reset),
-    .stall       (stall),
-    .flushcontrol(flushcontrol)
+    .stall       (stall)
     );
 
 
@@ -187,29 +208,40 @@ module mips(input         clk, reset,
   sl2 immsh(
     .a (signimmEX),
     .y (signimmsh));
-         
+
+// ###### Lee GeonWoo : Start #######
+// Change flow of circuit about PC(MEM -> EX)
+
   adder pcaddbr(
     .a (PCEX),
     .b (signimmsh),
     .y (pcbranch));
 
   mux2 #(32) pcbrmux(
-    .d0  (pcplus4),
-    .d1  (PCMEM),
-    .s   (pcsrc),
+    .d0  (PCEX),
+    .d1  (pcbranch),
+    .s   (pcsrcEX),
     .y   (pcnextbr));
 
   mux2 #(32) pcjumpmux(
     .d0   (pcnextbr),
-    .d1   ({pcplus4MEM[31:28], instrMEM[25:0], 2'b00}),
-    .s    (jumpMEM),
+    .d1   ({PCEX[31:28], instrEX[25:0], 2'b00}),
+    .s    (controlEX[0]),
     .y    (pcnextbrj));
 
   mux2 #(32) pcjrmux(
     .d0   (pcnextbrj),
-    .d1   (rd1MEM),
-    .s    (jrMEM),
-    .y    (pcnextfinal));
+    .d1   (rd1EX),
+    .s    (jr),
+    .y    (pcnextbrjjr));
+
+  mux2 #(32) pcfinalmux(
+    .d0   (pcplus4),
+    .d1   (pcnextbrjjr),
+    .s    (flush),
+    .y    (pcnextfinal)
+    );
+// ###### Lee GeonWoo : End #######
 
   // next PC logic
   flopenr #(32) pcreg(
@@ -218,6 +250,7 @@ module mips(input         clk, reset,
     .en    (~stall),
     .d     (pcnextfinal),
     .q     (pc));
+
 
 
   // register file logic
