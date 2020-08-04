@@ -1,6 +1,6 @@
 # MIPS_CPU
 
-MIPS CPU Implementation for school project(2018)
+MIPS CPU Implementation for University class project(Computer Architecture)
 
 ## Milestone
 
