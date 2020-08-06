@@ -1,6 +1,6 @@
 # MIPS_CPU
 
-MIPS CPU Implementation for University class project(Computer Architecture)
+MIPS CPU Implementation @ [COSE222 | Computer Architecture]
 
 ## Milestone
 
